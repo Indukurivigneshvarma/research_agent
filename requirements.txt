@@ -1,0 +1,6 @@
+gradio
+fpdf
+requests
+beautifulsoup4
+python-dotenv
+reportlab
