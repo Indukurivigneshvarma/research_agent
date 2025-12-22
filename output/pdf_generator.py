@@ -1,40 +1,20 @@
+# output/pdf_generator.py
+
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.units import inch
-import re
 import os
+import re
 
 
-def _format_text(text: str):
-    """
-    Convert markdown-style headings into
-    BOLD + UPPERCASE headings for PDF.
-    """
-    lines = text.split("\n")
-    formatted = []
-
-    for line in lines:
-        line = line.strip()
-
-        # Markdown headings → bold uppercase
-        if re.match(r"^#{1,3}\s+", line):
-            heading = re.sub(r"^#{1,3}\s+", "", line)
-            formatted.append(f"<b>{heading.upper()}</b>")
-            formatted.append("")  # spacing
-        else:
-            formatted.append(line)
-
-    return "\n".join(formatted)
-
-
-def generate_pdf(report_text: str, references: str, confidence_text: str):
+def generate_pdf(report_text: str, references: str) -> str:
     os.makedirs("outputs", exist_ok=True)
-    file_path = "outputs/final_report.pdf"
+    path = "outputs/final_report.pdf"
 
     doc = SimpleDocTemplate(
-        file_path,
+        path,
         pagesize=A4,
         rightMargin=50,
         leftMargin=50,
@@ -53,29 +33,36 @@ def generate_pdf(report_text: str, references: str, confidence_text: str):
         spaceAfter=10
     )
 
+    heading_style = ParagraphStyle(
+        "Heading",
+        parent=styles["Normal"],
+        fontSize=15,
+        leading=20,
+        spaceBefore=22,
+        spaceAfter=14,
+        fontName="Helvetica-Bold"
+    )
+
     story = []
 
-    # ---- MAIN REPORT ----
-    formatted_report = _format_text(report_text)
+    lines = report_text.split("\n")
 
-    for block in formatted_report.split("\n\n"):
-        if block.strip():
-            story.append(Paragraph(block, body_style))
+    for line in lines:
+        line = line.strip()
+
+        if not line:
             story.append(Spacer(1, 0.15 * inch))
+            continue
 
-    # ---- CONFIDENCE / LIMITATIONS ----
-    if confidence_text:
-        story.append(PageBreak())
-        story.append(Paragraph("<b>CONFIDENCE & LIMITATIONS</b>", body_style))
-        story.append(Spacer(1, 0.2 * inch))
+        if line.startswith("## "):
+            heading = line.replace("## ", "")
+            story.append(Paragraph(heading, heading_style))
+        else:
+            story.append(Paragraph(line, body_style))
 
-        for line in confidence_text.split("\n"):
-            if line.strip():
-                story.append(Paragraph(line, body_style))
-
-    # ---- REFERENCES PAGE ----
+    # References page
     story.append(PageBreak())
-    story.append(Paragraph("<b>REFERENCES</b>", body_style))
+    story.append(Paragraph("REFERENCES", heading_style))
     story.append(Spacer(1, 0.2 * inch))
 
     for ref in references.split("\n"):
@@ -83,5 +70,4 @@ def generate_pdf(report_text: str, references: str, confidence_text: str):
             story.append(Paragraph(ref, body_style))
 
     doc.build(story)
-
-    return file_path
+    return path

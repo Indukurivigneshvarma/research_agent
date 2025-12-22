@@ -1,9 +1,49 @@
-def is_sufficient(query: str, knowledge_chunks: list) -> bool:
-    if len(knowledge_chunks) < 3:
-        return False
+# agent/sufficiency_checker.py
 
-    unique_points = set(knowledge_chunks)
-    if len(unique_points) < len(knowledge_chunks) * 0.6:
-        return True
+from difflib import SequenceMatcher
+from typing import Tuple, Dict
 
-    return False
+
+def _similar(a: str, b: str) -> float:
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def check_sufficiency(
+    prev_summary: str,
+    curr_summary: str,
+    min_similarity: float = 0.85,
+    min_new_words: int = 120
+) -> Tuple[bool, Dict]:
+    """
+    Decide whether research has reached sufficiency using:
+    1. Knowledge stability (summary similarity)
+    2. Diminishing information gain (new words)
+    """
+
+    if not prev_summary or not curr_summary:
+        return False, {
+            "reason": "Insufficient history",
+            "similarity": 0.0,
+            "new_words": 999
+        }
+
+    similarity = _similar(prev_summary, curr_summary)
+
+    prev_words = set(prev_summary.split())
+    curr_words = set(curr_summary.split())
+    new_words = len(curr_words - prev_words)
+
+    sufficient = (
+        similarity >= min_similarity
+        and new_words <= min_new_words
+    )
+
+    return sufficient, {
+        "similarity": round(similarity, 2),
+        "new_words": new_words,
+        "reason": (
+            "Information stabilized"
+            if sufficient
+            else "New information still emerging"
+        )
+    }
