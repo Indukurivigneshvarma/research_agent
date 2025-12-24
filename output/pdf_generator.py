@@ -6,10 +6,16 @@ from reportlab.lib.enums import TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.units import inch
 import os
-import re
 
 
 def generate_pdf(report_text: str, references: str) -> str:
+    """
+    Generate a research-style PDF with:
+    - Clear bold headings
+    - Formal spacing
+    - Academic visual hierarchy
+    """
+
     os.makedirs("outputs", exist_ok=True)
     path = "outputs/final_report.pdf"
 
@@ -24,6 +30,9 @@ def generate_pdf(report_text: str, references: str) -> str:
 
     styles = getSampleStyleSheet()
 
+    # ----------------------------
+    # Body text style
+    # ----------------------------
     body_style = ParagraphStyle(
         "Body",
         parent=styles["Normal"],
@@ -33,34 +42,42 @@ def generate_pdf(report_text: str, references: str) -> str:
         spaceAfter=10
     )
 
+    # ----------------------------
+    # Heading style (MAIN SECTIONS)
+    # ----------------------------
     heading_style = ParagraphStyle(
         "Heading",
         parent=styles["Normal"],
         fontSize=15,
         leading=20,
-        spaceBefore=22,
+        spaceBefore=24,
         spaceAfter=14,
-        fontName="Helvetica-Bold"
+        fontName="Helvetica-Bold",
+        wordWrap="CJK"   # keeps long headings visually balanced
     )
 
     story = []
 
-    lines = report_text.split("\n")
-
-    for line in lines:
+    # ----------------------------
+    # Render report content
+    # ----------------------------
+    for line in report_text.split("\n"):
         line = line.strip()
 
         if not line:
             story.append(Spacer(1, 0.15 * inch))
             continue
 
+        # Markdown section heading
         if line.startswith("## "):
-            heading = line.replace("## ", "")
-            story.append(Paragraph(heading, heading_style))
+            heading_text = line.replace("## ", "")
+            story.append(Paragraph(heading_text, heading_style))
         else:
             story.append(Paragraph(line, body_style))
 
+    # ----------------------------
     # References page
+    # ----------------------------
     story.append(PageBreak())
     story.append(Paragraph("REFERENCES", heading_style))
     story.append(Spacer(1, 0.2 * inch))

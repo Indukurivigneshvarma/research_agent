@@ -38,7 +38,7 @@ def run_agent(query: str):
     sub_questions = generate_sub_questions(query)
     state.add_sub_questions(sub_questions)
 
-    MAX_ITERATIONS = 5
+    MAX_ITERATIONS = 10
     MIN_TOTAL_WORDS = 1500
 
     while state.iteration < MAX_ITERATIONS:

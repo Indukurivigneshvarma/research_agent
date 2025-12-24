@@ -5,43 +5,88 @@ from llm.ollama_client import call_ollama
 
 def synthesize(query: str, article_summaries: list[str], research_mode: str) -> str:
     """
-    Final analytical synthesis.
-    Produces a long, structured, analytical research report.
+    Two-pass synthesis with:
+    - Strict heading constraints
+    - Controlled analytical expansion
     """
 
     evidence = "\n\n".join(article_summaries)
 
-    prompt = f"""
-You are writing a FULL-LENGTH ANALYTICAL RESEARCH REPORT.
+    # ======================================================
+    # PASS 1 — Structured academic draft with strict headings
+    # ======================================================
+    base_prompt = f"""
+You are writing a FORMAL ACADEMIC-STYLE RESEARCH PAPER.
 
 RESEARCH QUESTION:
 {query}
 
-RESEARCH MODE:
-{research_mode}
-
-CONSOLIDATED RESEARCH NOTES:
+RESEARCH NOTES:
 {evidence}
 
-ANALYTICAL REQUIREMENTS:
-- Decide your OWN section headings (4–6 sections)
-- Each section must contain MULTIPLE PARAGRAPHS
-- Each section should include at least ONE analytical insight, such as:
-  • quantitative impact (percentages, productivity change, job impact)
-  • attribution to organizations (e.g., Gartner, McKinsey, Microsoft, academic studies)
-- Prefer explicit attribution like “According to X (year)…”
-- Preserve numbers, percentages, years, and organization names when present
-- Analyze implications, trade-offs, and long-term effects
-- Do NOT repeat the same idea across sections
+STRUCTURE REQUIREMENTS:
+- Use 4–6 section headings (excluding Conclusion)
+- EACH heading must be SHORT and CONCISE:
+  • Maximum 5 words
+  • Noun-phrase style (no full sentences)
+  • Examples: "Job Market Shifts", "Skill Transformation"
+- First section must be titled exactly: "Introduction"
+  • High-level overview only
+  • Minimal statistics
+- Final section must be titled exactly: "Conclusion"
+
+LANGUAGE & STYLE:
+- Impersonal, formal research tone
+- No first-person language
+- Do NOT refer to the document itself
+  (avoid “this report”, “this paper aims”, etc.)
+
+CONTENT RULES:
+- Use Markdown headings (## Heading)
+- Paragraph-based writing only
+- No references inside the text
 - Do NOT invent statistics or sources
-- Do NOT include references inside the content
-- Length MUST be sufficient to fill AT LEAST 3 FULL A4 PAGES
 
-FORMAT:
-- Use Markdown headings (## Section Title)
-- Paragraph-based writing only (no bullet points)
-
-BEGIN REPORT:
+BEGIN DRAFT:
 """
 
-    return call_ollama(prompt, temperature=0.25, tier="large")
+    base_report = call_ollama(
+        base_prompt,
+        temperature=0.25,
+        tier="large"
+    )
+
+    # ======================================================
+    # PASS 2 — Mandatory analytical expansion
+    # ======================================================
+    expansion_prompt = f"""
+You are expanding an academic research paper to journal length.
+
+TASK:
+- Expand EACH BODY section below (exclude Introduction and Conclusion)
+- Do NOT add new sections
+- Do NOT introduce new facts, numbers, or sources
+- For EACH BODY section:
+  • Write AT LEAST 3 long paragraphs
+  • Reuse and restate existing quantitative evidence
+  • Explicitly mention percentages, projections, or estimates already present
+  • Analyze implications, trade-offs, and long-term effects
+- Keep Introduction and Conclusion largely conceptual
+- Preserve all headings exactly as given
+- Maintain formal academic language
+- Avoid repetition across sections
+- Target length: AT LEAST 3 FULL A4 PAGES
+
+PAPER TO EXPAND:
+{base_report}
+
+BEGIN EXPANDED PAPER:
+"""
+
+    expanded_report = call_ollama(
+        expansion_prompt,
+        temperature=0.2,
+        tier="large"
+    )
+
+    return expanded_report
