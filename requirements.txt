@@ -1,0 +1,12 @@
+requests
+trafilatura
+python-dotenv
+openai
+sentence-transformers
+transformers
+torch
+scikit-learn
+pandas
+openpyxl
+reportlab
+gradio
