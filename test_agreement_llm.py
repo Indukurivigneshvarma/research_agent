@@ -1,12 +1,14 @@
 import os
 import json
-import google.generativeai as genai
+import cohere
 
-# Configure Gemini
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# ------------------------------
+# Configure Cohere
+# ------------------------------
+co = cohere.Client(os.getenv("COHERE_API_KEY"))
 
-MODEL = "gemini-flash-latest"
 
+MODEL = "command-a-03-2025"
 
 # ------------------------------
 # JSON CLEANER (CRITICAL FIX)
@@ -80,13 +82,22 @@ OUTPUT FORMAT:
 }}
 """.strip()
 
-model = genai.GenerativeModel(MODEL)
-response = model.generate_content(prompt)
+
+# ------------------------------
+# Call Cohere
+# ------------------------------
+response = co.chat(
+    model=MODEL,
+    message=prompt,
+    temperature=0,
+)
+
+raw_text = response.text
 
 print("\n====== RAW LLM OUTPUT ======\n")
-print(repr(response.text))
+print(repr(raw_text))
 
-cleaned = clean_llm_json(response.text)
+cleaned = clean_llm_json(raw_text)
 
 print("\n====== CLEANED JSON TEXT ======\n")
 print(cleaned)

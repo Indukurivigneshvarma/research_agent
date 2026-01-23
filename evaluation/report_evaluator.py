@@ -29,17 +29,14 @@ def _clean_llm_json(text: str) -> str:
 
     text = text.strip()
 
-    # Remove ```json fences
     if text.startswith("```"):
         parts = text.split("```")
         if len(parts) >= 2:
             text = parts[1].strip()
 
-    # Remove leading 'json'
     if text.lower().startswith("json"):
         text = text[4:].strip()
 
-    # Trim before first '{'
     first = text.find("{")
     if first != -1:
         text = text[first:]
@@ -53,17 +50,19 @@ def _clean_llm_json(text: str) -> str:
 
 def evaluate_report(
     user_query: str,
+    research_plan: Dict[str, List[str]],
     report_text: str,
     summaries: Dict[str, str],
     headings: List[str],
     references: List[str],
 ) -> Dict:
     """
-    Performs a post-generation evaluation of the research report.
+    Performs a plan-aware post-generation evaluation of the research report.
 
     Evaluates:
+    - Alignment with intended research plan
     - Factual grounding in summaries
-    - Coverage of the user query
+    - Coverage of planned dimensions
     - Structural quality
     - Citation discipline
     """
@@ -76,34 +75,48 @@ def evaluate_report(
     heading_block = "\n".join(headings)
     refs_block = "\n".join(references)
 
+    plan_block = "\n".join(
+        f"- {d}"
+        for d in research_plan.get("dimensions", [])
+    )
+
     prompt = f"""
 You are a strict academic research evaluator.
 
 YOUR TASK:
-Evaluate the quality of the generated research report.
+Evaluate the quality of the generated research report relative to the
+USER'S RESEARCH QUESTION and the INTENDED RESEARCH PLAN.
 
 You must assess ONLY what is provided.
 Do NOT invent missing information.
 Do NOT rewrite or fix the report.
 
+================ EVALUATION PRINCIPLES ================
+
+- The research plan defines the INTENDED SCOPE.
+- The summaries define the ONLY allowed factual ground truth.
+- The report must be evaluated based on how well it uses the summaries
+  to fulfill the research plan.
+
 ================ EVALUATION CRITERIA ================
 
 1. Accuracy & Grounding
-- Are claims supported by the summaries?
-- Any hallucinated or unsupported facts?
+- Are all claims in the report supported by the provided summaries?
+- Are there any hallucinated, unsupported, or overstated claims?
 
 2. Coverage & Completeness
-- Does the report fully address the research question?
-- Are any major dimensions missing?
+- Does the report address ALL planned research dimensions?
+- Are any dimensions missing, weakly covered, or unevenly developed?
+- Does the synthesis align with the stated research goal?
 
 3. Citation Quality
-- Sentence-level citations in topical sections
-- References match citation markers
+- Are declarative sentences properly cited?
+- Do citation markers correspond correctly to the references?
 
 4. Structure & Clarity
-- Logical flow
+- Logical flow and coherence
 - Adequate paragraph depth
-- Balanced sections
+- Balanced treatment of sections
 
 ================ OUTPUT RULES ================
 - Return JSON ONLY
@@ -127,6 +140,13 @@ Do NOT rewrite or fix the report.
 RESEARCH QUESTION:
 {user_query}
 
+RESEARCH PLAN (INTENDED SCOPE):
+Goal:
+{research_plan.get("goal")}
+
+Planned Dimensions:
+{plan_block}
+
 HEADINGS:
 {heading_block}
 
@@ -147,7 +167,7 @@ Return ONLY the JSON object.
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.0,
-        max_tokens=800,
+        max_tokens=900,
     )
 
     raw = r.choices[0].message.content or ""
@@ -156,10 +176,8 @@ Return ONLY the JSON object.
     try:
         return json.loads(cleaned)
     except Exception:
-        # Fail-safe: NEVER crash pipeline
         return {
             "status": "evaluation_failed",
             "reason": "Evaluator returned invalid JSON",
             "raw_output": raw.strip()[:1000],
         }
-

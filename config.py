@@ -11,7 +11,8 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 # Vector search
 # ---------------------------
 
-VECTOR_TOP_K = 5
+VECTOR_TOP_K = 10
+CROSS_TOP_K = 5
 
 # ---------------------------
 # Web ingestion limits
@@ -23,14 +24,20 @@ MAX_RAW_CHARS = 8000
 MAX_SUMMARY_TOKENS = 1000
 
 # ---------------------------
-# Modes
+# Research modes
 # ---------------------------
 
 MODES = {
     "quick": {
-        "subqueries": 2,
+        "iterations": 1,              # only initial discovery
+        "queries_per_iteration": 2,
     },
     "standard": {
-        "subqueries": 4,
+        "iterations": 2,              # +1 coverage refinement
+        "queries_per_iteration": 2,
+    },
+    "deep": {
+        "iterations": 3,              # +2 coverage refinements
+        "queries_per_iteration": 2,
     },
 }

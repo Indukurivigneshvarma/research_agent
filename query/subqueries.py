@@ -1,74 +1,77 @@
-import os
-from groq import Groq
-from typing import List
-from config import MODES
+# query/subqueries.py
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
+import os
+from typing import List
+from groq import Groq
+
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 MODEL = "llama-3.1-8b-instant"
 
 
-def generate_subqueries(
+def generate_initial_subqueries(
     user_query: str,
-    mode: str,
+    research_goal: str,
+    dimensions: List[str],
+    n_queries: int = 2,
 ) -> List[str]:
     """
-    Generates grounded sub-queries based strictly on the user query.
+    Generates EXACTLY `n_queries` initial search sub-queries
+    grounded in the research plan dimensions.
 
-    quick → 2
-    standard → 4
+    Used ONLY for iteration 1.
     """
 
-    n = MODES[mode]["subqueries"]
+    dim_block = "\n".join(f"- {d}" for d in dimensions)
 
     prompt = f"""
-You are decomposing a research question into focused sub-questions.
+You are generating INITIAL SEARCH QUERIES for academic research.
 
-================ CORE PRINCIPLE ================
-- The user query defines the FULL scope.
-- Each sub-query must stay strictly within the
-  semantic scope of the user query.
-- Sub-queries must NOT generalize, broaden, or
-  abstract beyond the user query.
+TASK:
+Generate EXACTLY {n_queries} search queries that together provide
+broad initial coverage of the research goal.
 
-================ TASK ================
-Generate EXACTLY {n} sub-queries.
-
-================ SUB-QUERY RULES (ABSOLUTE) ================
-- Each sub-query must be a focused reformulation,
-  angle, or analytical lens on the SAME problem.
-- Do NOT introduce broader regions, populations,
-  or domains than those implied in the user query.
-- Do NOT generalize to related but wider contexts.
-- Do NOT add comparative or cross-regional framing
-  unless explicitly present in the user query.
-- Each sub-query must still independently reflect
-  the original research intent.
-
-================ OUTPUT RULES ================
-- One sub-query per line
+RULES (MANDATORY):
+- Queries MUST be grounded in the research goal and user query
+- Queries MUST collectively cover multiple dimensions
+- Do NOT generate one query per dimension
+- Do NOT introduce new scope, locations, or populations
+- Queries must be suitable for academic or web search
+- One query per line
 - No numbering
 - No explanations
-- Academic phrasing
-- Directly grounded in the user query
 
-================ USER QUERY (SCOPE ANCHOR) ================
+RESEARCH GOAL:
+{research_goal}
+
+USER QUERY:
 {user_query}
+
+RESEARCH DIMENSIONS:
+{dim_block}
+
+OUTPUT:
+Exactly {n_queries} lines, each a search query.
 """.strip()
 
-    r = client.chat.completions.create(
+    response = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=200,
+        temperature=0.3,
+        max_tokens=300,
     )
 
-    lines = [
-        l.strip()
-        for l in r.choices[0].message.content.split("\n")
-        if l.strip()
+    text = response.choices[0].message.content.strip()
+
+    queries = [
+        line.strip()
+        for line in text.split("\n")
+        if line.strip()
     ]
 
-    return lines[:n]
+    if len(queries) < n_queries:
+        raise ValueError(
+            f"Expected {n_queries} initial sub-queries, got {len(queries)}"
+        )
+
+    return queries[:n_queries]

@@ -7,7 +7,7 @@ from trace.research_trace import ResearchTrace
 
 
 # --------------------------------------------------
-# Vector store (persistent, reuse-ready)
+# Vector store (persistent)
 # --------------------------------------------------
 
 VECTOR_CLIENT = VectorStoreClient(
@@ -17,18 +17,48 @@ VECTOR_CLIENT = VectorStoreClient(
 
 
 # --------------------------------------------------
+# Helper: extract research plan from trace
+# --------------------------------------------------
+
+def extract_research_plan(trace_text: str) -> str:
+    if not trace_text:
+        return ""
+
+    lines = trace_text.splitlines()
+    plan_lines = []
+    in_plan = False
+    content_started = False
+
+    for line in lines:
+        if line.strip() == "RESEARCH PLAN":
+            in_plan = True
+            continue
+
+        if in_plan:
+            # Skip separator lines before content starts
+            if line.strip().startswith("=") and not content_started:
+                continue
+
+            # Stop when next section separator appears AFTER content
+            if line.strip().startswith("=") and content_started:
+                break
+
+            if line.strip():
+                content_started = True
+
+            plan_lines.append(line)
+
+    return "\n".join(plan_lines).strip()
+
+
+
+# --------------------------------------------------
 # Gradio handler
 # --------------------------------------------------
 
 def run_app(query: str, mode: str):
     trace = ResearchTrace()
 
-    # run_pipeline returns:
-    # summaries: List[Dict]
-    # trace_text: str
-    # report_text: str | None
-    # pdf_path: str | None
-    # evaluation: Dict | None
     (
         summaries,
         trace_text,
@@ -42,38 +72,40 @@ def run_app(query: str, mode: str):
         trace=trace,
     )
 
-    # --------------------------------------------------
+    # -----------------------------
     # Summaries output
-    # --------------------------------------------------
+    # -----------------------------
 
     if summaries:
         summaries_text = "\n\n".join(
-            f"{s['id']} (total_score={s.get('total_score', 'NA')}):\n{s['summary']}"
+            f"{s['id']} (score={s.get('total_score', 'NA')}):\n{s['summary']}"
             for s in summaries
         )
     else:
         summaries_text = ""
 
-    # --------------------------------------------------
-    # Report text output
-    # --------------------------------------------------
+    # -----------------------------
+    # Research plan output
+    # -----------------------------
 
-    report_text = report_text or ""
+    plan_text = extract_research_plan(trace_text)
 
-    # --------------------------------------------------
-    # Evaluation output
-    # --------------------------------------------------
+    # -----------------------------
+    # Evaluation output (safe JSON)
+    # -----------------------------
 
-    evaluation_text = (
-        json.dumps(evaluation, indent=2)
-        if evaluation
-        else ""
-    )
+    evaluation_text = ""
+    if evaluation:
+        try:
+            evaluation_text = json.dumps(evaluation, indent=2)
+        except Exception:
+            evaluation_text = str(evaluation)
 
     return (
         summaries_text,
+        plan_text,
         trace_text,
-        report_text,
+        report_text or "",
         pdf_path,
         evaluation_text,
     )
@@ -84,7 +116,16 @@ def run_app(query: str, mode: str):
 # --------------------------------------------------
 
 with gr.Blocks() as demo:
-    gr.Markdown("## 🧠 Research Agent — End-to-End Academic Pipeline")
+    gr.Markdown(
+        """
+## 🧠 Research Agent — Iterative Academic Discovery Pipeline
+
+**Modes**
+- **Quick**: Initial discovery (2 queries, 1 iteration)
+- **Standard**: +1 coverage refinement (2 iterations total)
+- **Deep**: +2 coverage refinements (3 iterations total)
+"""
+    )
 
     with gr.Row():
         query = gr.Textbox(
@@ -94,24 +135,30 @@ with gr.Blocks() as demo:
         )
 
     mode = gr.Radio(
-        ["quick", "standard"],
+        choices=["quick", "standard", "deep"],
         value="standard",
-        label="Mode",
+        label="Research Mode",
     )
 
     btn = gr.Button("Run Research")
 
     with gr.Tabs():
-        with gr.Tab("📌 Generated Summaries"):
-            summaries_out = gr.Textbox(
-                lines=25,
-                label="Final Summaries (Post-Scoring & Conflict Resolution)",
+        with gr.Tab("🧠 Research Plan"):
+            plan_out = gr.Textbox(
+                lines=18,
+                label="Research Goal & Dimensions",
             )
 
-        with gr.Tab("🧾 Research Trace"):
+        with gr.Tab("📌 Collected Summaries"):
+            summaries_out = gr.Textbox(
+                lines=25,
+                label="Final Summaries (Post-Scoring & Resolution)",
+            )
+
+        with gr.Tab("🧾 Research Trace (Full Audit Trail)"):
             trace_out = gr.Textbox(
                 lines=40,
-                label="Full Pipeline Trace",
+                label="End-to-End Research Trace",
             )
 
         with gr.Tab("📝 Final Report"):
@@ -125,7 +172,7 @@ with gr.Blocks() as demo:
                 label="Download Generated PDF Report",
             )
 
-        with gr.Tab("🔍 Self-Evaluation & Critique"):
+        with gr.Tab("🔍 Self-Evaluation"):
             evaluation_out = gr.Textbox(
                 lines=25,
                 label="Post-Generation Quality Assessment",
@@ -136,6 +183,7 @@ with gr.Blocks() as demo:
         inputs=[query, mode],
         outputs=[
             summaries_out,
+            plan_out,
             trace_out,
             report_out,
             pdf_out,
