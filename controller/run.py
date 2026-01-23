@@ -298,7 +298,9 @@ def run_pipeline(
 
                 meta = extract_metadata(url)
 
-                provider = "groq" if mode == "quick" else "openrouter"
+                provider = "groq" if provider_toggle % 2 == 0 else "openrouter"
+                provider_toggle += 1
+            
                 summary_text = generate_summary(raw_text, provider)
 
                 record = {
