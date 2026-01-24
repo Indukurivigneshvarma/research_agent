@@ -79,6 +79,7 @@ def run_pipeline(
     trace: ResearchTrace,
 ):
     summaries: List[Dict] = []
+    provider_toggle = 0  # alternates Groq / OpenRouter summarization
     seen_urls = set()
 
     embedder = SentenceTransformer("all-MiniLM-L6-v2")
