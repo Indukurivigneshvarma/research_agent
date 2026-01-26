@@ -1,24 +1,6 @@
 from typing import List, Dict
 
 
-def build_cited_summaries(
-    summaries: List[Dict],
-) -> Dict[str, str]:
-    """
-    Maps summary IDs to citation markers.
-
-    Output:
-      {
-        "S1": "[S1]",
-        "S2": "[S2]"
-      }
-    """
-    return {
-        s["id"]: f"[{s['id']}]"
-        for s in summaries
-    }
-
-
 def build_references(
     summaries: List[Dict],
 ) -> List[str]:
@@ -36,8 +18,6 @@ def build_references(
         domain = s.get("domain") or "Unknown Source"
         url = s.get("url") or ""
 
-        refs.append(
-            f"[{sid}] {author}. {domain}. {url}"
-        )
+        refs.append(f"[{sid}] {author}. {domain}. {url}")
 
     return refs

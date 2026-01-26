@@ -23,44 +23,38 @@ def generate_pdf(
 
     styles = getSampleStyleSheet()
 
-    # ---------- TITLE ----------
-    if "TitleStyle" not in styles:
-        styles.add(
-            ParagraphStyle(
-                name="TitleStyle",
-                fontSize=18,
-                leading=22,
-                spaceBefore=24,
-                spaceAfter=24,
-                alignment=TA_CENTER,
-                fontName="Helvetica-Bold",
-            )
+    styles.add(
+        ParagraphStyle(
+            name="TitleStyle",
+            fontSize=18,
+            leading=22,
+            spaceBefore=24,
+            spaceAfter=24,
+            alignment=TA_CENTER,
+            fontName="Helvetica-Bold",
         )
+    )
 
-    # ---------- SECTION HEADERS ----------
-    if "SectionHeader" not in styles:
-        styles.add(
-            ParagraphStyle(
-                name="SectionHeader",
-                fontSize=13,
-                leading=16,
-                spaceBefore=18,
-                spaceAfter=12,
-                fontName="Helvetica-Bold",
-            )
+    styles.add(
+        ParagraphStyle(
+            name="SectionHeader",
+            fontSize=13,
+            leading=16,
+            spaceBefore=18,
+            spaceAfter=12,
+            fontName="Helvetica-Bold",
         )
+    )
 
-    # ---------- BODY (RENAMED — FIX) ----------
-    if "ReportBody" not in styles:
-        styles.add(
-            ParagraphStyle(
-                name="ReportBody",
-                fontSize=11,
-                leading=15,
-                spaceBefore=6,
-                spaceAfter=6,
-            )
+    styles.add(
+        ParagraphStyle(
+            name="ReportBody",
+            fontSize=11,
+            leading=15,
+            spaceBefore=6,
+            spaceAfter=6,
         )
+    )
 
     doc = SimpleDocTemplate(
         output_path,

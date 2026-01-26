@@ -1,13 +1,6 @@
 # config.py
 
 # ---------------------------
-# Embeddings
-# ---------------------------
-
-EMBEDDING_DIM = 384
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
-
-# ---------------------------
 # Vector search
 # ---------------------------
 

@@ -51,7 +51,6 @@ def extract_research_plan(trace_text: str) -> str:
     return "\n".join(plan_lines).strip()
 
 
-
 # --------------------------------------------------
 # Gradio handler
 # --------------------------------------------------
@@ -62,7 +61,7 @@ def run_app(query: str, mode: str):
     (
         summaries,
         trace_text,
-        report_text,
+        report_text,   # still generated internally (needed for PDF + evaluation)
         pdf_path,
         evaluation,
     ) = run_pipeline(
@@ -105,7 +104,6 @@ def run_app(query: str, mode: str):
         summaries_text,
         plan_text,
         trace_text,
-        report_text or "",
         pdf_path,
         evaluation_text,
     )
@@ -118,12 +116,7 @@ def run_app(query: str, mode: str):
 with gr.Blocks() as demo:
     gr.Markdown(
         """
-## 🧠 Research Agent — Iterative Academic Discovery Pipeline
-
-**Modes**
-- **Quick**: Initial discovery (2 queries, 1 iteration)
-- **Standard**: +1 coverage refinement (2 iterations total)
-- **Deep**: +2 coverage refinements (3 iterations total)
+## 🧠 AI Research Agent
 """
     )
 
@@ -161,18 +154,12 @@ with gr.Blocks() as demo:
                 label="End-to-End Research Trace",
             )
 
-        with gr.Tab("📝 Final Report"):
-            report_out = gr.Textbox(
-                lines=35,
-                label="Academic Report Text",
-            )
-
         with gr.Tab("📄 Download PDF"):
             pdf_out = gr.File(
                 label="Download Generated PDF Report",
             )
 
-        with gr.Tab("🔍 Self-Evaluation"):
+        with gr.Tab("🔍 Evaluation"):
             evaluation_out = gr.Textbox(
                 lines=25,
                 label="Post-Generation Quality Assessment",
@@ -185,7 +172,6 @@ with gr.Blocks() as demo:
             summaries_out,
             plan_out,
             trace_out,
-            report_out,
             pdf_out,
             evaluation_out,
         ],

@@ -104,9 +104,4 @@ class VectorStoreClient:
         with open(self.meta_path, "w", encoding="utf-8") as f:
             json.dump(self.metadata, f, ensure_ascii=False, indent=2)
 
-    # --------------------------------------------------
-    # Reset protection
-    # --------------------------------------------------
 
-    def reset(self):
-        raise RuntimeError("Vector DB reset disabled.")
