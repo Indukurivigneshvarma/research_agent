@@ -1,15 +1,40 @@
+"""
+intent_selector.py
+────────────────────────────────────────────────────────────
+Purpose:
+    Determines whether a newly generated sub-query is
+    semantically equivalent to a question already stored
+    in the vector database.
+
+    If YES  → reuse existing summary (saves cost + avoids duplication)
+    If NO   → proceed with web search and new ingestion
+
+Pipeline Role:
+    Acts as the system's **knowledge reuse gatekeeper**.
+    Prevents redundant research and keeps the system efficient.
+
+This is a high-precision semantic matching task,
+NOT general similarity or relevance scoring.
+"""
+
 import os
 import json
 from typing import Dict, List
 from groq import Groq
 
+
+# --------------------------------------------------
+# LLM Setup (Groq — strong reasoning model)
+# --------------------------------------------------
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL = "llama-3.3-70b-versatile"
 
 
 # --------------------------------------------------
-# JSON CLEANER (REQUIRED)
+# JSON CLEANER
 # --------------------------------------------------
+# LLMs often wrap JSON in markdown fences or extra text.
+# This ensures we extract ONLY valid JSON.
 def _clean_llm_json(text: str) -> str:
     if not text:
         return ""
@@ -22,11 +47,11 @@ def _clean_llm_json(text: str) -> str:
         if len(parts) >= 2:
             text = parts[1].strip()
 
-    # Remove leading 'json'
+    # Remove leading "json"
     if text.lower().startswith("json"):
         text = text[4:].strip()
 
-    # Trim before first '{'
+    # Trim everything before first {
     first = text.find("{")
     if first != -1:
         text = text[first:]
@@ -34,27 +59,42 @@ def _clean_llm_json(text: str) -> str:
     return text.strip()
 
 
+# --------------------------------------------------
+# Intent Matching Function
+# --------------------------------------------------
 def select_best_intents(
     subqueries: List[str],
     candidates_by_subquery: Dict[str, Dict[str, str]],
 ) -> Dict[str, str | None]:
     """
-    subqueries:
-        ["subquery text 1", "subquery text 2", ...]
+    Determines which stored query (if any) matches each sub-query.
 
-    candidates_by_subquery:
+    Inputs:
+        subqueries:
+            List of newly generated sub-queries.
+
+        candidates_by_subquery:
+            {
+              "Q1": { "VS_01": "query text", "VS_02": "query text" },
+              "Q2": { "VS_11": "query text" }
+            }
+
+            These come from vector search + reranking.
+
+    Output:
         {
-          "Q1": { "VS_01": "query text", "VS_02": "query text" },
-          "Q2": { "VS_11": "query text", "VS_12": "query text" }
+          "Q1": "VS_02",   # reuse this
+          "Q2": None       # no match → do web search
         }
 
-    Returns:
-        {
-          "Q1": "VS_02",
-          "Q2": null
-        }
+    Important:
+        This is NOT similarity matching.
+        This is "are these asking the SAME question?"
     """
 
+    # --------------------------------------------------
+    # Build structured prompt blocks
+    # --------------------------------------------------
     blocks = []
 
     for i, sq in enumerate(subqueries, 1):
@@ -79,6 +119,9 @@ CANDIDATE QUESTIONS:
 
     blocks_text = "\n\n".join(blocks)
 
+    # --------------------------------------------------
+    # Prompt instructs the model to do strict equivalence testing
+    # --------------------------------------------------
     prompt = f"""
 You are comparing research questions.
 
@@ -115,6 +158,9 @@ OUTPUT FORMAT:
 }}
 """.strip()
 
+    # --------------------------------------------------
+    # LLM Call — Intent Equivalence Decision
+    # --------------------------------------------------
     r = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
@@ -125,16 +171,19 @@ OUTPUT FORMAT:
     raw = r.choices[0].message.content or ""
     cleaned = _clean_llm_json(raw)
 
+    # --------------------------------------------------
+    # Safe JSON parsing
+    # --------------------------------------------------
     try:
         parsed = json.loads(cleaned)
     except Exception:
-        # Fail-safe: select NONE for all sub-queries
+        # Fail-safe: no reuse if output invalid
         return {
             f"Q{i+1}": None
             for i in range(len(subqueries))
         }
 
-    # Final safety: ensure all keys exist
+    # Ensure all expected keys exist
     for i in range(len(subqueries)):
         parsed.setdefault(f"Q{i+1}", None)
 

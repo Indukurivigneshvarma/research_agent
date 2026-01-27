@@ -2,11 +2,18 @@ import os
 from typing import Dict, List
 from openai import OpenAI
 
+# --------------------------------------------------
+# LLM CLIENT SETUP (OpenRouter)
+# --------------------------------------------------
+# OpenRouter is used as a unified gateway to access large
+# instruction-tuned models for long-form structured writing.
 client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url="https://openrouter.ai/api/v1",
 )
 
+# Default large model for report synthesis
+# Can be overridden via environment variable.
 MODEL = os.getenv(
     "OPENROUTER_MODEL",
     "meta-llama/llama-3.1-70b-instruct"
@@ -20,23 +27,95 @@ def write_report(
     references: List[str],
 ) -> str:
     """
-    Writes a full academic research report with:
+    ACADEMIC REPORT GENERATOR
+    =========================
 
-    - Sentence-level citations in ALL narrative sections
-    - Deterministic References section
+    Purpose
+    -------
+    This function generates the **final academic research report text**
+    using the validated summaries as the ONLY source of factual content.
+
+    This is the core synthesis stage where the system converts:
+        • structured headings
+        • resolved summaries
+        • citation mappings
+    into a coherent, publication-style research report.
+
+    Why this step is critical
+    -------------------------
+    The pipeline separates:
+        1. Retrieval
+        2. Validation & scoring
+        3. Conflict resolution
+        4. Structure generation
+        5. **Final synthesis (THIS STEP)**
+
+    This ensures the final report:
+        ✓ Is grounded in sources
+        ✓ Uses consistent structure
+        ✓ Enforces strict citation discipline
+        ✓ Avoids hallucinated facts
+
+    Inputs
+    ------
+    title : str
+        Final academic report title generated earlier.
+
+    headings : List[str]
+        Ordered list of report section headings.
+        These are mandatory and cannot be altered by the LLM.
+
+    summaries : Dict[str, str]
+        Mapping:
+            {
+              "S1": "summary text",
+              "S2": "summary text"
+            }
+        These are the ONLY allowed factual sources.
+
+    references : List[str]
+        Pre-built reference entries (deterministic).
+        The LLM must copy them exactly without modification.
+
+    Output
+    ------
+    str
+        Fully formatted research report containing:
+        - Title block
+        - All required sections
+        - Sentence-level citations
+        - Final references section
+
+    Key Guarantees Enforced by Prompt
+    ---------------------------------
+    • Sentence-level citations required everywhere
+    • No uncited claims
+    • No new facts allowed
+    • Structured section format
+    • References section is deterministic
     """
 
+    # --------------------------------------------------
+    # Prepare structured inputs for LLM
+    # --------------------------------------------------
+
+    # Summaries block: labeled source text for citation linking
     summary_block = "\n".join(
         f"{sid}: {text}"
         for sid, text in summaries.items()
     )
 
+    # Headings wrapped in markers so the model must follow structure
     heading_block = "\n".join(
         f"@@{h}@@" for h in headings
     )
 
+    # Reference entries that must be copied verbatim
     refs_block = "\n".join(references)
 
+    # --------------------------------------------------
+    # Prompt enforces formatting, grounding, and citation discipline
+    # --------------------------------------------------
     prompt = f"""
 You are writing an academic research synthesis.
 
@@ -108,11 +187,14 @@ Return the COMPLETE report using the exact format described.
 Do NOT include anything else.
 """.strip()
 
+    # --------------------------------------------------
+    # LLM Call (long-form generation)
+    # --------------------------------------------------
     r = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-        max_tokens=2500,
+        temperature=0.2,  # low temperature → controlled synthesis
+        max_tokens=2500,  # large context for full report
     )
 
     return r.choices[0].message.content.strip()

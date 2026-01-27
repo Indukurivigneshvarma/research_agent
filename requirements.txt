@@ -1,24 +1,37 @@
+# Environment
 python-dotenv
+
+# LLM Providers
 openai
 groq
 cohere
 google-generativeai
 
+# Embeddings / ML
 sentence-transformers
 transformers
 torch
 accelerate
 sentencepiece
 faiss-cpu
+scikit-learn
 numpy
 
+# Web & Parsing
+tavily-python
+newspaper3k
+trafilatura
+requests
+beautifulsoup4
+lxml
+lxml_html_clean
+
+# Data
 pandas
 openpyxl
 
+# Reporting
 reportlab
 
+# UI
 gradio
-
-tavily-python
-newspaper3k
-lxml_html_clean

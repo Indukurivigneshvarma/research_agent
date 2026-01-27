@@ -1,3 +1,39 @@
+"""
+app.py
+======
+
+GRADIO USER INTERFACE FOR THE AI RESEARCH AGENT
+
+This file exposes the research pipeline through a web interface.
+It is purely a PRESENTATION + CONTROL layer.
+
+It does NOT perform research logic itself.
+Instead, it:
+
+• Collects user inputs
+• Calls the core pipeline (run_pipeline)
+• Displays structured outputs across tabs
+
+----------------------------------------------------
+UI OUTPUT SECTIONS
+----------------------------------------------------
+
+1. Research Plan
+   → Shows the goal + conceptual dimensions derived from the query
+
+2. Collected Summaries
+   → Final evidence units after scoring and conflict resolution
+
+3. Research Trace
+   → Full system reasoning log (transparent audit trail)
+
+4. PDF Download
+   → Final academic report file
+
+5. Evaluation
+   → Self-assessment of report quality by LLM evaluator
+"""
+
 import json
 import gradio as gr
 
@@ -6,21 +42,28 @@ from controller.run import run_pipeline
 from trace.research_trace import ResearchTrace
 
 
-# --------------------------------------------------
-# Vector store (persistent)
-# --------------------------------------------------
-
+# ==========================================================
+# Persistent Vector Store
+# ==========================================================
+# Stores summaries so future research can reuse prior knowledge
 VECTOR_CLIENT = VectorStoreClient(
     persist_dir="vector_data",
     embedding_dim=384,
 )
 
 
-# --------------------------------------------------
-# Helper: extract research plan from trace
-# --------------------------------------------------
-
+# ==========================================================
+# Helper: Extract Research Plan from Trace
+# ==========================================================
 def extract_research_plan(trace_text: str) -> str:
+    """
+    Pulls the RESEARCH PLAN section out of the full trace.
+
+    The trace contains many sections. This isolates just:
+        Goal
+        Dimensions
+    """
+
     if not trace_text:
         return ""
 
@@ -35,11 +78,11 @@ def extract_research_plan(trace_text: str) -> str:
             continue
 
         if in_plan:
-            # Skip separator lines before content starts
+            # Skip separators before content
             if line.strip().startswith("=") and not content_started:
                 continue
 
-            # Stop when next section separator appears AFTER content
+            # Stop when next section starts
             if line.strip().startswith("=") and content_started:
                 break
 
@@ -51,17 +94,25 @@ def extract_research_plan(trace_text: str) -> str:
     return "\n".join(plan_lines).strip()
 
 
-# --------------------------------------------------
-# Gradio handler
-# --------------------------------------------------
-
+# ==========================================================
+# Main UI Handler
+# ==========================================================
 def run_app(query: str, mode: str):
+    """
+    Called when the user presses "Run Research".
+
+    It:
+    1. Creates a fresh trace logger
+    2. Runs the entire research pipeline
+    3. Formats outputs for the UI
+    """
+
     trace = ResearchTrace()
 
     (
         summaries,
         trace_text,
-        report_text,   # still generated internally (needed for PDF + evaluation)
+        report_text,   # used internally for PDF + evaluation
         pdf_path,
         evaluation,
     ) = run_pipeline(
@@ -71,10 +122,9 @@ def run_app(query: str, mode: str):
         trace=trace,
     )
 
-    # -----------------------------
-    # Summaries output
-    # -----------------------------
-
+    # --------------------------------------------------
+    # Format Summaries for display
+    # --------------------------------------------------
     if summaries:
         summaries_text = "\n\n".join(
             f"{s['id']} (score={s.get('total_score', 'NA')}):\n{s['summary']}"
@@ -83,16 +133,14 @@ def run_app(query: str, mode: str):
     else:
         summaries_text = ""
 
-    # -----------------------------
-    # Research plan output
-    # -----------------------------
-
+    # --------------------------------------------------
+    # Extract Research Plan from Trace
+    # --------------------------------------------------
     plan_text = extract_research_plan(trace_text)
 
-    # -----------------------------
-    # Evaluation output (safe JSON)
-    # -----------------------------
-
+    # --------------------------------------------------
+    # Format Evaluation JSON
+    # --------------------------------------------------
     evaluation_text = ""
     if evaluation:
         try:
@@ -100,6 +148,9 @@ def run_app(query: str, mode: str):
         except Exception:
             evaluation_text = str(evaluation)
 
+    # --------------------------------------------------
+    # Outputs mapped to UI tabs
+    # --------------------------------------------------
     return (
         summaries_text,
         plan_text,
@@ -109,17 +160,15 @@ def run_app(query: str, mode: str):
     )
 
 
-# --------------------------------------------------
-# Gradio UI
-# --------------------------------------------------
-
+# ==========================================================
+# Gradio Interface Layout
+# ==========================================================
 with gr.Blocks() as demo:
-    gr.Markdown(
-        """
-## 🧠 AI Research Agent
-"""
-    )
+    gr.Markdown("## 🧠 AI Research Agent")
 
+    # -----------------------------
+    # User Inputs
+    # -----------------------------
     with gr.Row():
         query = gr.Textbox(
             label="Research Question",
@@ -135,6 +184,9 @@ with gr.Blocks() as demo:
 
     btn = gr.Button("Run Research")
 
+    # -----------------------------
+    # Output Tabs
+    # -----------------------------
     with gr.Tabs():
         with gr.Tab("🧠 Research Plan"):
             plan_out = gr.Textbox(
@@ -165,6 +217,9 @@ with gr.Blocks() as demo:
                 label="Post-Generation Quality Assessment",
             )
 
+    # -----------------------------
+    # Button Action
+    # -----------------------------
     btn.click(
         run_app,
         inputs=[query, mode],
@@ -177,4 +232,5 @@ with gr.Blocks() as demo:
         ],
     )
 
-demo.launch()
+demo.launch(server_name="0.0.0.0", server_port=7860)
+

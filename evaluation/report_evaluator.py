@@ -7,6 +7,9 @@ from openai import OpenAI
 # --------------------------------------------------
 # LLM setup
 # --------------------------------------------------
+# This evaluator uses an LLM (via OpenRouter) to score the
+# *quality* of the generated research report.
+# It is NOT used to generate research content — only to judge it.
 
 client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
@@ -22,6 +25,8 @@ MODEL = os.getenv(
 # --------------------------------------------------
 # JSON CLEANER (MANDATORY)
 # --------------------------------------------------
+# LLMs often wrap JSON in ```json fences or add text before it.
+# This function strips formatting noise and returns clean JSON text.
 
 def _clean_llm_json(text: str) -> str:
     if not text:
@@ -29,14 +34,17 @@ def _clean_llm_json(text: str) -> str:
 
     text = text.strip()
 
+    # Remove markdown code fences
     if text.startswith("```"):
         parts = text.split("```")
         if len(parts) >= 2:
             text = parts[1].strip()
 
+    # Remove leading "json" label
     if text.lower().startswith("json"):
         text = text[4:].strip()
 
+    # Trim everything before first JSON object
     first = text.find("{")
     if first != -1:
         text = text[first:]
@@ -57,16 +65,69 @@ def evaluate_report(
     references: List[str],
 ) -> Dict:
     """
-    Performs a plan-aware post-generation evaluation of the research report.
+    REPORT QUALITY EVALUATOR
+    ========================
 
-    Evaluates:
-    - Alignment with intended research plan
-    - Factual grounding in summaries
-    - Coverage of planned dimensions
-    - Structural quality
-    - Citation discipline
+    Purpose
+    -------
+    Performs a *post-generation academic quality evaluation* of the
+    research report using an LLM acting as a strict evaluator.
+
+    This is a meta-analysis step — it does NOT modify the report.
+    It only scores and diagnoses quality.
+
+    The evaluation is PLAN-AWARE and EVIDENCE-GROUNDED.
+
+    Evaluation Dimensions
+    ---------------------
+    1. Accuracy & Grounding
+       - Are claims supported by summaries?
+       - Any hallucinations or overstatements?
+
+    2. Coverage & Completeness
+       - Are all planned research dimensions addressed?
+       - Is coverage balanced and aligned with the research goal?
+
+    3. Citation Quality
+       - Sentence-level citation discipline
+       - Marker-to-reference correctness
+
+    4. Structure & Clarity
+       - Logical flow
+       - Section balance
+       - Paragraph depth
+
+    Inputs
+    ------
+    user_query : str
+        Original research question.
+
+    research_plan : Dict
+        Output of research planner:
+        {
+            "goal": "...",
+            "dimensions": [...]
+        }
+
+    report_text : str
+        Fully generated academic report.
+
+    summaries : Dict[str, str]
+        Ground truth factual base used during generation.
+
+    headings : List[str]
+        Final report headings.
+
+    references : List[str]
+        Final formatted references list.
+
+    Output
+    ------
+    Dict
+        Structured evaluation report with scores, notes, and limitations.
     """
 
+    # Convert summaries into evaluator-readable block
     summary_block = "\n".join(
         f"{sid}: {text}"
         for sid, text in summaries.items()
@@ -75,10 +136,19 @@ def evaluate_report(
     heading_block = "\n".join(headings)
     refs_block = "\n".join(references)
 
+    # Planned dimensions list
     plan_block = "\n".join(
         f"- {d}"
         for d in research_plan.get("dimensions", [])
     )
+
+    # --------------------------------------------------
+    # Evaluation Prompt
+    # --------------------------------------------------
+    # The prompt enforces strict grounding:
+    #   Research Plan = Intended Scope
+    #   Summaries     = Allowed Facts
+    #   Report        = Object Being Judged
 
     prompt = f"""
 You are a strict academic research evaluator.
@@ -163,6 +233,7 @@ GENERATED REPORT:
 Return ONLY the JSON object.
 """.strip()
 
+    # Run evaluator model
     r = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
@@ -173,9 +244,11 @@ Return ONLY the JSON object.
     raw = r.choices[0].message.content or ""
     cleaned = _clean_llm_json(raw)
 
+    # Attempt to parse evaluation JSON
     try:
         return json.loads(cleaned)
     except Exception:
+        # Fail-safe: return diagnostic error instead of crashing pipeline
         return {
             "status": "evaluation_failed",
             "reason": "Evaluator returned invalid JSON",

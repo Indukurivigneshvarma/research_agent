@@ -1,24 +1,90 @@
+# analytics/conflict_detector.py
+
+"""
+FACTUAL CONFLICT DETECTOR
+=========================
+
+Purpose
+-------
+Detects HARD factual contradictions between research summaries.
+
+This module ensures:
+• Logical consistency across sources
+• Prevention of mutually exclusive claims entering the final report
+• Evidence reliability through conflict resolution
+
+This module DOES NOT:
+✗ Decide which source is correct
+✗ Rewrite summaries
+✗ Judge credibility
+
+It ONLY identifies contradictions for downstream resolution.
+
+Model Used
+----------
+Gemini Flash — fast structured reasoning over paired claims.
+"""
+
 import os
 import json
 from typing import List, Dict
 import google.generativeai as genai
 
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
+# --------------------------------------------------
+# Model configuration
+# --------------------------------------------------
+
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 MODEL = "gemini-flash-latest"
 
+
+# --------------------------------------------------
+# Conflict detection
+# --------------------------------------------------
 
 def detect_conflicts(
     summaries: List[Dict[str, str]],
 ) -> Dict:
     """
-    Detects pairwise factual contradictions between summaries.
-    LLM only EXTRACTS conflicts, does NOT resolve them.
+    Detects HARD factual contradictions between summaries.
+
+    Parameters
+    ----------
+    summaries : List[Dict]
+        Format:
+        [
+          {"id": "S1", "summary": "..."},
+          {"id": "S2", "summary": "..."}
+        ]
+
+    Returns
+    -------
+    Dict
+
+    Example:
+    {
+      "conflicts": [
+        {
+          "ids": ["S1", "S2"],
+          "claim_a": "...",
+          "claim_b": "..."
+        }
+      ]
+    }
+
+    Conflict Definition (STRICT)
+    ----------------------------
+    A contradiction exists ONLY if:
+    • Both claims refer to the same phenomenon/variable
+    • They cannot logically both be true in the same world
     """
 
+    # Not enough summaries for comparison
     if len(summaries) < 2:
         return {"conflicts": []}
 
+    # Combine summaries into one block for LLM analysis
     block = "\n\n".join(
         f"{s['id']}:\n{s['summary']}"
         for s in summaries
@@ -83,16 +149,22 @@ SUMMARIES:
 {block}
 """.strip()
 
-
     model = genai.GenerativeModel(MODEL)
     response = model.generate_content(prompt)
 
     raw = response.text.strip()
 
-    # Remove markdown fences if present
+    # --------------------------------------------------
+    # Clean markdown fences if LLM added them
+    # --------------------------------------------------
+
     if raw.startswith("```"):
         raw = raw.strip("`")
         raw = raw.replace("json", "", 1).strip()
+
+    # --------------------------------------------------
+    # Parse JSON safely
+    # --------------------------------------------------
 
     try:
         return json.loads(raw)

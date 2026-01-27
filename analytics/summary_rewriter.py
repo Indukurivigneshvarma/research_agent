@@ -6,6 +6,9 @@ from groq import Groq
 # --------------------------------------------------
 # LLM setup
 # --------------------------------------------------
+# This module uses a fast Groq-hosted LLM to rewrite summaries
+# after conflict resolution. The goal is to REMOVE only specific
+# contradictory claims while preserving all other information.
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL = "llama-3.1-8b-instant"
@@ -15,6 +18,22 @@ def rewrite_summaries(
     rewrite_plan: Dict[str, Dict[str, object]]
 ) -> Dict[str, str]:
     """
+    SUMMARY REWRITING MODULE
+    =========================
+
+    Purpose
+    -------
+    After conflict detection + resolution, certain claims are marked
+    for removal from specific summaries. This function asks an LLM to
+    carefully rewrite those summaries without the flagged claims.
+
+    The system does NOT delete text directly because:
+    - Claims may be embedded in sentences
+    - Context may need light rephrasing
+    - Removing text blindly can break coherence
+
+    So we use a controlled LLM rewrite.
+
     rewrite_plan format:
     {
         "S4": {
@@ -34,12 +53,17 @@ def rewrite_summaries(
     }
     """
 
+    # If no summaries need rewriting, return empty result
     if not rewrite_plan:
         return {}
 
     # --------------------------------------------------
-    # Build input blocks safely (NO f-string backslashes)
+    # Build structured blocks for each summary
     # --------------------------------------------------
+    # Each block includes:
+    # - Summary ID
+    # - Original summary text
+    # - List of claims that must be removed
 
     blocks = []
 
@@ -59,8 +83,14 @@ CLAIMS TO REMOVE:
     joined_blocks = "\n\n".join(blocks)
 
     # --------------------------------------------------
-    # Prompt (carefully designed — no hard deletion)
+    # LLM Prompt Design
     # --------------------------------------------------
+    # Carefully constrained to:
+    # ✔ Remove only specified claims
+    # ✔ Preserve all other information
+    # ✔ Avoid adding or inventing facts
+    # ✔ Avoid summarization or commentary
+    # ✔ Maintain original tone and detail level
 
     prompt = f"""
 You are editing research summaries.
@@ -90,17 +120,23 @@ SUMMARIES:
 """.strip()
 
     # --------------------------------------------------
-    # Run LLM
+    # Run LLM rewrite
     # --------------------------------------------------
 
     response = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.0,
-        max_tokens=2000,
+        temperature=0.0,   # Deterministic editing
+        max_tokens=2000,   # Enough space for multiple rewrites
     )
 
     content = response.choices[0].message.content.strip()
+
+    # --------------------------------------------------
+    # Parse strict JSON output
+    # --------------------------------------------------
+    # The model MUST return:
+    # { "rewritten": { "S1": "...", "S2": "..." } }
 
     try:
         data = json.loads(content)
