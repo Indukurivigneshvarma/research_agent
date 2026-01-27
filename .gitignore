@@ -11,3 +11,9 @@ venv/
 # OS / editor
 .DS_Store
 .vscode/
+
+vector_data/
+*.faiss
+*.json
+__pycache__/
+.env
